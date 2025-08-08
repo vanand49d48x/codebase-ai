@@ -81,6 +81,50 @@ temp/
 *.bin
 *.gguf
 *.onnx
+*.safetensors
+*.ckpt
+*.pth
+*.pt
+
+# Large data directories
+backend/workspace/
+workspace/
+data/
+models/
+cache/
+
+# Docker data
+postgres_data/
+qdrant_data/
+ollama_data/
+
+# Temporary files and logs
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # Cache
 .cache/
