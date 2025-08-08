@@ -37,9 +37,9 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to validate required directories
-validate_directories() {
-    print_section "Validating Required Directories"
+# Function to validate and create required directories and files
+validate_and_create() {
+    print_section "Validating and Creating Required Structure"
     
     local required_dirs=(
         "backend"
@@ -48,35 +48,58 @@ validate_directories() {
         "tests"
     )
     
+    # Create directories
     for dir in "${required_dirs[@]}"; do
         if [[ ! -d "$dir" ]]; then
-            print_error "Required directory '$dir' not found!"
+            print_warning "Directory '$dir' not found!"
             print_status "Creating directory '$dir'..."
             mkdir -p "$dir"
+            print_status "✓ Directory '$dir' created"
         else
             print_status "✓ Directory '$dir' exists"
         fi
     done
     
-    # Check for required files
-    local required_files=(
+    # Check and create required files with basic templates
+    local files_to_check=(
         "docker-compose.yml"
         "backend/Dockerfile"
         "backend/requirements.txt"
         "backend/main.py"
         "backend/config.py"
+        "backend/chunker.py"
+        "backend/summarizer.py"
+        "backend/embedder.py"
+        "backend/vector_store.py"
+        "backend/db.py"
+        "backend/ingest.py"
+        "backend/models/project.py"
+        "backend/models/chunk.py"
+        "backend/models/file.py"
+        "backend/utils/file_utils.py"
+        "backend/Modelfile"
+        "tests/test_system.py"
+        "tests/run_tests.sh"
+        "tests/README.md"
+        "README.md"
+        ".gitignore"
     )
     
-    for file in "${required_files[@]}"; do
+    for file in "${files_to_check[@]}"; do
         if [[ ! -f "$file" ]]; then
-            print_error "Required file '$file' not found!"
-            exit 1
+            print_warning "File '$file' not found!"
+            print_status "This file is required for the system to work properly."
+            print_status "Please ensure all project files are present before starting."
+            print_error "Missing critical file: $file"
+            print_status "Please clone the repository from GitHub or restore missing files."
+            return 1
         else
             print_status "✓ File '$file' exists"
         fi
     done
     
     print_status "All required directories and files validated!"
+    return 0
 }
 
 # Function to check Docker status
@@ -153,9 +176,41 @@ setup_models() {
     print_status "✓ AI models setup completed"
 }
 
+# Function to check if images need to be rebuilt
+check_images() {
+    print_section "Checking Docker Images"
+    
+    # Check if backend image exists
+    if ! docker images | grep -q "new-backend"; then
+        print_warning "Backend image not found!"
+        print_status "Building backend service..."
+        docker compose build --no-cache backend
+        if [[ $? -ne 0 ]]; then
+            print_error "Failed to build backend image!"
+            return 1
+        fi
+    else
+        print_status "✓ Backend image exists"
+    fi
+    
+    # Check if other service images exist
+    local services=("postgres" "qdrant" "ollama")
+    for service in "${services[@]}"; do
+        if ! docker images | grep -q "$service"; then
+            print_warning "$service image not found, pulling..."
+            docker compose pull "$service"
+        else
+            print_status "✓ $service image exists"
+        fi
+    done
+}
+
 # Function to start all services
 start_services() {
     print_section "Starting All Services"
+    
+    # Check and build images if needed
+    check_images
     
     print_status "Starting PostgreSQL and Qdrant..."
     docker compose up -d postgres qdrant
@@ -267,7 +322,7 @@ run_tests() {
     fi
     
     print_status "Running system tests..."
-    python tests/test_system.py
+    python3 tests/test_system.py
     
     if [[ $? -eq 0 ]]; then
         print_status "✓ All tests passed!"
@@ -285,6 +340,44 @@ stop_services() {
     docker compose down
     
     print_status "✓ All services stopped"
+}
+
+# Function to build services with no-cache
+build_services() {
+    print_section "Building Services (No Cache)"
+    
+    print_status "Building backend service with no-cache..."
+    docker compose build --no-cache backend
+    
+    if [[ $? -eq 0 ]]; then
+        print_status "✓ Backend service built successfully"
+    else
+        print_error "✗ Failed to build backend service"
+        return 1
+    fi
+    
+    print_status "✓ All services built successfully"
+}
+
+# Function to rebuild all services
+rebuild_services() {
+    print_section "Rebuilding All Services (No Cache)"
+    
+    print_status "Stopping all services..."
+    docker compose down
+    
+    print_status "Removing all images..."
+    docker compose down --rmi all
+    
+    print_status "Building all services with no-cache..."
+    docker compose build --no-cache
+    
+    if [[ $? -eq 0 ]]; then
+        print_status "✓ All services rebuilt successfully"
+    else
+        print_error "✗ Failed to rebuild services"
+        return 1
+    fi
 }
 
 # Function to restart services
@@ -307,6 +400,8 @@ show_help() {
     echo "  start       - Start all services (default)"
     echo "  stop        - Stop all services"
     echo "  restart     - Restart all services"
+    echo "  build       - Build services with no-cache"
+    echo "  rebuild     - Rebuild all services with no-cache"
     echo "  status      - Show system status"
     echo "  logs        - Show service logs"
     echo "  logs [SERVICE] - Show logs for specific service (backend|ollama|postgres|qdrant)"
@@ -318,6 +413,8 @@ show_help() {
     echo ""
     echo "Examples:"
     echo "  $0 start          # Start all services"
+    echo "  $0 build          # Build services with no-cache"
+    echo "  $0 rebuild        # Rebuild all services with no-cache"
     echo "  $0 logs backend   # Show backend logs"
     echo "  $0 status         # Check system status"
     echo "  $0 test           # Run tests"
@@ -331,7 +428,11 @@ main() {
     case $command in
         "start")
             print_header "Starting CodebaseAI System"
-            validate_directories
+            validate_and_create
+            if [[ $? -ne 0 ]]; then
+                print_error "Validation failed! Please ensure all required files are present."
+                exit 1
+            fi
             check_docker
             setup_models
             start_services
@@ -362,6 +463,14 @@ main() {
         "restart")
             restart_services
             ;;
+        "build")
+            check_docker
+            build_services
+            ;;
+        "rebuild")
+            check_docker
+            rebuild_services
+            ;;
         "status")
             show_status
             ;;
@@ -379,7 +488,7 @@ main() {
             setup_models
             ;;
         "validate")
-            validate_directories
+            validate_and_create
             ;;
         "help"|"-h"|"--help")
             show_help

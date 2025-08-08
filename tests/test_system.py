@@ -205,15 +205,20 @@ class CodebaseAITester:
     
     def test_error_handling(self) -> Dict:
         """Test error handling for invalid requests"""
-        # Test invalid project ID
+        # Test invalid project ID (should return 422 for validation error, not 404)
         response = requests.get(f"{self.base_url}/projects/invalid-uuid", timeout=10)
-        if response.status_code != 404:
-            raise Exception(f"Expected 404 for invalid project, got {response.status_code}")
+        if response.status_code != 422:
+            raise Exception(f"Expected 422 for invalid UUID format, got {response.status_code}")
         
         # Test invalid search parameters
         response = requests.post(f"{self.base_url}/search", timeout=10)
         if response.status_code != 422:
             raise Exception(f"Expected 422 for invalid search params, got {response.status_code}")
+        
+        # Test a valid UUID format that doesn't exist (should return 404)
+        response = requests.get(f"{self.base_url}/projects/12345678-1234-1234-1234-123456789012", timeout=10)
+        if response.status_code != 404:
+            raise Exception(f"Expected 404 for non-existent project, got {response.status_code}")
         
         return {"status": "error_handling_working"}
     
