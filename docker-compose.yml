@@ -1,0 +1,73 @@
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/workspace:/app/workspace
+    depends_on:
+      - qdrant
+      - postgres
+      - ollama
+    environment:
+      - WORKSPACE_DIR=/app/workspace
+      - LLM_PROVIDER=ollama
+      - LLM_MODEL=codestral-q
+      - OLLAMA_HOST=http://ollama:11434
+      - EMBEDDING_PROVIDER=sentence-transformers
+      - EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - QDRANT_COLLECTION=code_chunks
+      - DB_URL=postgresql://user:password@postgres:5432/codebase_db
+      - HOST=0.0.0.0
+      - PORT=8000
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: codebase_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    entrypoint: ["/bin/bash", "-c", "ollama serve"]
+    deploy:
+      resources:
+        limits:
+          cpus: '6'
+          memory: '12G'
+        reservations:
+          cpus: '4'
+          memory: '8G'
+
+volumes:
+  qdrant_data:
+  postgres_data:
+  ollama_data:
